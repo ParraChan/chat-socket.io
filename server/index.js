@@ -30,48 +30,47 @@ await db.execute(`
     )
     `)
 
-io.on('connection',async (socket) => {
-    const username = socket.handshake.auth.username
-    console.log('un usuario se ha conectado')
+io.on('connection', async (socket) => {
+  const username = socket.handshake.auth.username ?? 'anonymous'
+  console.log(`Usuario conectado: ${username}`)
 
-    socket.on('disconnect',()=>{
-        console.log('un usuario se ha desconectado')
-    })
+  socket.on('disconnect', () => {
+    console.log(`Usuario desconectado: ${username}`)
+  })
 
-    socket.on('chat message',async(msg)=>{
-        let result 
-         const user = socket.handshake.auth.username ?? 'anonymous'
-        try{
-           
-            result= await db.execute({
-                sql:`INSERT INTO messages (content, user) VALUES (:msg, :username)`,
-                args: {msg, username}
-            })
-        }
-        catch(e){
-            console.error(e)
-            return 
-            
-        }
-        console.log('message: '+msg)
-        io.emit('chat message', msg, result.lastInsertRowid.toString().username)
-    })
-   
-    
-         if(!socket.recovered){
-    try{
-        const results = await db.execute({
-            sql :'SELECT id, content, user FROM messages WHERE id> ?',
-            args: [socket.handshake.auth.serverOffset ?? 0]
-        })
-        results.rows.forEach(row=>{
-            socket.emit('chat message', row.content, row.id.toString(), username)
-        })
-    }catch(e){
-        console.error(e)
+  socket.on('chat message', async (msg) => {
+    let result
+    try {
+      result = await db.execute({
+        sql: `INSERT INTO messages (content, user) VALUES (:msg, :username)`,
+        args: { msg, username }
+      })
+    } catch (e) {
+      console.error(e)
+      return
     }
+
+    console.log(`Mensaje de ${username}: ${msg}`)
+    io.emit('chat message', msg, result.lastInsertRowid.toString(), username)
+  })
+
+  // recuperación de mensajes
+  if (!socket.recovered) {
+    try {
+      const results = await db.execute({
+        sql: 'SELECT id, content, user FROM messages WHERE id > ?',
+        args: [socket.handshake.auth.serverOffset ?? 0]
+      })
+
+      results.rows.forEach(row => {
+        socket.emit('chat message', row.content, row.id.toString(), row.user)
+      })
+    } catch (e) {
+      console.error(e)
     }
+  }
 })
+
 
 app.use(logger('dev'))
 
