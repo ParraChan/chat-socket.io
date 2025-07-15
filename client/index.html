@@ -8,58 +8,73 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>miduChat</title>
 
-  <script type="module">
-    import { io } from 'https://cdn.socket.io/4.3.2/socket.io.esm.min.js'
+<script type="module">
+  import { io } from 'https://cdn.socket.io/4.8.1/socket.io.esm.min.js'
 
-const getUsername = async () => {
-  const username = localStorage.getItem('username')
-  if (username) {
-    console.log(`User existed: ${username}`)
-    return username
+  const getUsername = async () => {
+    const savedUsername = localStorage.getItem('username')
+    if (savedUsername && savedUsername !== 'undefined') {
+      console.log('Usando username guardado:', savedUsername)
+      return savedUsername
+    }
+
+    const res = await fetch('https://randomuser.me/api/')
+    const data = await res.json()
+    const randomUsername = data.results[0].login.username
+    localStorage.setItem('username', randomUsername)
+    console.log('Nuevo username generado:', randomUsername)
+    return randomUsername
   }
 
-  const res = await fetch('https://randomuser.me/api/')
-  const data = await res.json()
-  const randomUsername = data.results[0].login.username
+  const main = async () => {
+    const username = await getUsername()
+    console.log('Enviando username al servidor:', username)
 
-  localStorage.setItem('username', randomUsername)
-  return randomUsername
-}
-
-
-    const socket = io({
+    const socket = io('http://localhost:3000', {
       auth: {
-        username: await getUsername(),
+        username,
         serverOffset: 0
       }
     })
 
-    const form = document.getElementById('form')
-    const input = document.getElementById('input')
+    socket.on('connect', () => {
+      console.log('Conectado al servidor con ID:', socket.id)
+    })
+
     const messages = document.getElementById('messages')
 
-   socket.on('chat message', (msg, serverOffset, username) => {
-  console.log('[CLIENTE] Mensaje recibido:', { msg, serverOffset, username })
+    socket.on('chat message', (msg, serverOffset, user) => {
+      console.log('[CLIENTE] Mensaje recibido:', { msg, serverOffset, user })
 
-  const item = `<li>
-    <p>${msg}</p>
-    <small>${username}</small>
-  </li>`
-  messages.insertAdjacentHTML('beforeend', item)
-  socket.auth.serverOffset = serverOffset
-  messages.scrollTop = messages.scrollHeight
-})
+      const item = `<li><p>${msg}</p><small>${user}</small></li>`
+      messages.insertAdjacentHTML('beforeend', item)
 
+      // 🔽 Esperamos que el DOM renderice y luego hacemos scroll
+      requestAnimationFrame(() => {
+        messages.scrollTop = messages.scrollHeight
+        // O alternativamente:
+        // messages.lastElementChild?.scrollIntoView({ behavior: 'smooth' })
+      })
+    })
+
+    const form = document.getElementById('form')
+    const input = document.getElementById('input')
 
     form.addEventListener('submit', (e) => {
       e.preventDefault()
-
-      if (input.value) {
-        socket.emit('chat message', input.value)
+      if (input.value.trim()) {
+        socket.emit('chat message', input.value.trim())
         input.value = ''
       }
     })
-  </script>
+  }
+
+  main()
+</script>
+
+
+
+
 
   <style>
     *,
